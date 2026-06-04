@@ -1,19 +1,19 @@
-# ainote-skill (noteshare)
+# ainote-skill
 
-Cursor Agent Skill：noteshare / 小红书相关能力——发布笔记、查询已发布笔记、导入模板、获取设备列表。
+Cursor Agent Skill：小红书相关能力——发布笔记、查询已发布笔记、导入模板、获取设备列表。
 
 ## 安装
 
 ### 方式一：Skills CLI（推荐）
 
 ```bash
-npx skills add wuxin0608/ainote-skill@noteshare -g -y
+npx skills add wuxin0608/ainote-skill -g -y
 ```
 
 ### 方式二：手动克隆
 
 ```bash
-git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/noteshare
+git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
 ```
 
 ## 配置
@@ -26,17 +26,10 @@ git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/notesha
 pip install -r requirements.txt
 ```
 
-3. 配置 API Key（二选一）：
+3. 配置 API Key：
 
 ```bash
 export AINOTE_API_KEY=sk-your-key-here
-```
-
-或：
-
-```bash
-cp scripts/env.example.py scripts/env.py
-# 编辑 scripts/env.py 填入 AINOTE_API_KEY
 ```
 
 ## 使用流程

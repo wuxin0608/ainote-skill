@@ -18,7 +18,7 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
         "publishKey": publish_key,
         "category": category,
     }
-    payload = request_skill("/v/ainote/skill/task/list", body)
+    payload = request_skill("/v1/ainote/skill/task/list", body)
     raw_list = payload.get("list") or payload.get("data", {}).get("list") or []
 
     page_size = params.get("pageSize")

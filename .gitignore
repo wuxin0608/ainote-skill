@@ -23,7 +23,6 @@ output/
 .env
 .env.*
 !.env.example
-scripts/env.py
 
 # IDE / 编辑器
 .idea/

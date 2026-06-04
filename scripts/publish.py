@@ -26,7 +26,7 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "imgs": list(urls),
     }
-    payload = request_skill("/v/ainote/skill/add/task", body)
+    payload = request_skill("/v1/ainote/skill/add/task", body)
     return {"noteshareResult": payload}
 
 

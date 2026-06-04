@@ -11,7 +11,7 @@ from common import load_devices, request_skill, save_devices
 
 
 def run() -> List[Dict[str, str]]:
-    payload = request_skill("/v/ainote/skill/device/list", {})
+    payload = request_skill("/v1/ainote/skill/device/list", {})
     raw_list = payload.get("list") or payload.get("data", {}).get("list") or []
     devices: List[Dict[str, str]] = []
     for item in raw_list:

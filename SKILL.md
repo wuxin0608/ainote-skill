@@ -1,6 +1,6 @@
 ---
-name: noteshare
-description: noteshare/小红书相关能力：发布笔记、查询已发布笔记列表、导入模板、获取设备列表。Use when publishing or querying noteshare content via ainote skill API.
+name: ainote-skill
+description: ainote skill / 小红书相关能力：发布笔记、查询已发布笔记列表、导入模板、获取设备列表。Use when publishing or querying content via ainote skill API.
 version: 2.0.0
 author: custom
 type: automation
@@ -28,12 +28,9 @@ output_schema:
 
 ## 配置
 
-仅需 **`AINOTE_API_KEY`**（`sk-` 前缀）：
+设置环境变量 **`AINOTE_API_KEY`**（`sk-` 前缀，在 Web 端「AI Agent 接入」复制）。
 
-1. 环境变量 `AINOTE_API_KEY`
-2. 或 `scripts/env.py` 中写死（从 `env.example.py` 复制）
-
-可选 `AINOTE_API_BASE`，默认 `https://ainote.com.cn/api/web`。
+可选 **`AINOTE_API_BASE`**，默认 `https://ainote.com.cn/api/web`。
 
 每次调用前脚本会校验 API Key 是否存在；请求头使用 `X-AINOTE-API-KEY`。
 
@@ -73,12 +70,7 @@ output_schema:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `title` | string | 是 | 模板标题 |
-| `text` | string | 是 | 模板正文 |
-| `imgs` | string[] | 是 | 配图 URL（1–10 张） |
-| `tag` | string | 否 | 话题标签 |
-| `originalId` | string | 否 | 原文 ID（去重用） |
-| `deviceName` / `publishKey` | string | 条件 | 同 publish |
+| `keyword` | string | 是 | 小红书笔记链接（可多条，逗号分隔）；或纯文案（多条用 `---` 分隔），与 Web 端「导入模板」一致 |
 
 ## 快速调用
 
@@ -94,6 +86,6 @@ python3 scripts/publish.py '{"urls":["https://..."],"title":"标题","text":"文
 # 3) 已发布列表
 python3 scripts/note-list.py --params '{"category":"published","deviceName":"我的设备","pageSize":10,"pageNum":1}'
 
-# 4) 导入模板
-python3 scripts/add-template.py --params '{"title":"标题","text":"文案","imgs":["https://..."],"deviceName":"我的设备"}'
+# 4) 导入模板（小红书链接或文案）
+python3 scripts/add-template.py --params '{"keyword":"https://www.xiaohongshu.com/explore/..."}'
 ```

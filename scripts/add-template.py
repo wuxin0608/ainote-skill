@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""add-template：导入笔记模板"""
+"""add-template：导入笔记模板（与 v1/xhs/template/add 一致，仅 keyword）"""
 
 from __future__ import annotations
 
@@ -8,33 +8,15 @@ import json
 import sys
 from typing import Any, Dict
 
-from common import request_skill, resolve_publish_key
+from common import request_skill
 
 
 def run(params: Dict[str, Any]) -> Dict[str, Any]:
-    publish_key = resolve_publish_key(params)
-    title = str(params.get("title") or "").strip()
-    text = str(params.get("text") or params.get("desc") or "").strip()
-    imgs = params.get("imgs") or params.get("urls") or []
-    if isinstance(imgs, str):
-        imgs = [imgs]
-    if not title or not text or not imgs:
-        raise ValueError("缺少 title、text 或 imgs")
+    keyword = str(params.get("keyword") or "").strip()
+    if not keyword:
+        raise ValueError("缺少 keyword")
 
-    body: Dict[str, Any] = {
-        "publishKey": publish_key,
-        "title": title,
-        "text": text,
-        "imgs": list(imgs),
-    }
-    tag = params.get("tag")
-    if tag:
-        body["tag"] = str(tag)
-    original_id = params.get("originalId") or params.get("original_id")
-    if original_id:
-        body["originalId"] = str(original_id)
-
-    payload = request_skill("/v/ainote/skill/add/template", body)
+    payload = request_skill("/v1/ainote/skill/add/template", {"keyword": keyword})
     return {"templateResult": payload}
 
 
@@ -48,7 +30,7 @@ def main() -> int:
     args = parse_args()
     if not args.params:
         print(
-            '用法: python add-template.py \'{"title":"...","text":"...","imgs":["https://..."],"deviceName":"设备名"}\'',
+            '用法: python add-template.py --params \'{"keyword":"https://www.xiaohongshu.com/explore/..."}\'',
             file=sys.stderr,
         )
         return 1

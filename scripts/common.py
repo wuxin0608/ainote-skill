@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -21,33 +20,15 @@ API_KEY_HEADER = "X-AINOTE-API-KEY"
 SUCCESS_CODE = 20000
 
 
-def _load_env_module():
-    sys.path.insert(0, SCRIPT_DIR)
-    try:
-        import env  # noqa: WPS433
-
-        return env
-    except ImportError:
-        return None
-
-
 def get_api_key() -> str:
     key = os.environ.get("AINOTE_API_KEY", "").strip()
     if not key:
-        env_mod = _load_env_module()
-        if env_mod is not None:
-            key = str(getattr(env_mod, "AINOTE_API_KEY", "") or "").strip()
-    if not key:
-        raise ValueError("缺少 AINOTE_API_KEY，请设置环境变量或在 scripts/env.py 中配置")
+        raise ValueError("缺少 AINOTE_API_KEY，请设置环境变量 AINOTE_API_KEY")
     return key
 
 
 def get_api_base() -> str:
     base = os.environ.get("AINOTE_API_BASE", "").strip()
-    if not base:
-        env_mod = _load_env_module()
-        if env_mod is not None:
-            base = str(getattr(env_mod, "AINOTE_API_BASE", "") or "").strip()
     return (base or DEFAULT_API_BASE).rstrip("/")
 
 
