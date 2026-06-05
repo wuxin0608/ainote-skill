@@ -17,7 +17,8 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("缺少 keyword")
 
     payload = request_skill("/v1/ainote/skill/add/template", {"keyword": keyword})
-    return {"templateResult": payload}
+    raw_list = payload.get("list") or payload.get("data", {}).get("list") or []
+    return {"templateResult": {"list": raw_list, "code": payload.get("code", 20000)}}
 
 
 def parse_args() -> argparse.Namespace:

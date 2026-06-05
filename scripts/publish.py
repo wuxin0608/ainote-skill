@@ -7,24 +7,20 @@ import json
 import sys
 from typing import Any, Dict, List, Optional
 
-from common import request_skill, resolve_publish_key
+from common import request_skill, resolve_device_id
 
 
 def run(params: Dict[str, Any]) -> Dict[str, Any]:
-    publish_key = resolve_publish_key(params)
-    urls = params.get("urls") or params.get("imgs") or []
-    if isinstance(urls, str):
-        urls = [urls]
+    device_id = resolve_device_id(params)
     title = str(params.get("title") or "").strip()
     text = str(params.get("text") or "").strip()
     if not title or not text:
         raise ValueError("缺少 title 或 text")
 
     body = {
-        "publishKey": publish_key,
+        "deviceId": device_id,
         "title": title,
         "text": text,
-        "imgs": list(urls),
     }
     payload = request_skill("/v1/ainote/skill/add/task", body)
     return {"noteshareResult": payload}
@@ -49,7 +45,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not argv:
         print(
-            '用法: python publish.py \'{"urls":[...],"title":"...","text":"...","deviceName":"设备名"}\'',
+            '用法: python publish.py \'{"title":"...","text":"...","deviceId":123}\'',
             file=sys.stderr,
         )
         return 1

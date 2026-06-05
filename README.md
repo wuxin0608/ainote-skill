@@ -17,7 +17,6 @@ git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-
 ```
 
 ## 配置
-
 1. 在 ainote Web 端侧边栏 **「AI Agent 接入」** 复制 `sk-...` API Key（需 VIP 会员）
 
 2. 安装 Python 依赖：

@@ -15,7 +15,7 @@ SKILL_ROOT = os.path.dirname(SCRIPT_DIR)
 CACHE_DIR = os.path.join(SKILL_ROOT, ".cache")
 DEVICES_CACHE = os.path.join(CACHE_DIR, "devices.json")
 
-DEFAULT_API_BASE = "https://ainote.com.cn/api/web"
+API_BASE = "https://ainote.com.cn/api/web"
 API_KEY_HEADER = "X-AINOTE-API-KEY"
 SUCCESS_CODE = 20000
 
@@ -27,14 +27,9 @@ def get_api_key() -> str:
     return key
 
 
-def get_api_base() -> str:
-    base = os.environ.get("AINOTE_API_BASE", "").strip()
-    return (base or DEFAULT_API_BASE).rstrip("/")
-
-
 def request_skill(path: str, body: Optional[Dict[str, Any]] = None) -> Any:
     api_key = get_api_key()
-    url = f"{get_api_base()}{path}"
+    url = f"{API_BASE}{path}"
     response = requests.post(
         url,
         json=body or {},
@@ -54,27 +49,53 @@ def ensure_cache_dir() -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
 
 
-def load_devices() -> List[Dict[str, str]]:
+def load_devices() -> List[Dict[str, Any]]:
     if not os.path.isfile(DEVICES_CACHE):
         return []
     with open(DEVICES_CACHE, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, list):
         return []
-    out: List[Dict[str, str]] = []
+    out: List[Dict[str, Any]] = []
     for item in data:
         if isinstance(item, dict):
             name = str(item.get("name") or "").strip()
-            url = str(item.get("url") or item.get("publishKey") or "").strip()
-            if name and url:
-                out.append({"name": name, "url": url})
+            device_id = item.get("deviceId")
+            url = str(item.get("url") or "").strip()
+            if name and device_id is not None:
+                out.append({"name": name, "deviceId": device_id, "url": url})
     return out
 
 
-def save_devices(devices: List[Dict[str, str]]) -> None:
+def save_devices(devices: List[Dict[str, Any]]) -> None:
     ensure_cache_dir()
     with open(DEVICES_CACHE, "w", encoding="utf-8") as f:
         json.dump(devices, f, ensure_ascii=False, indent=2)
+
+
+def resolve_device_id(params: Optional[Dict[str, Any]] = None) -> int:
+    params = params or {}
+    raw_id = params.get("deviceId")
+    if raw_id is not None:
+        device_id = int(raw_id)
+        if device_id > 0:
+            return device_id
+        raise ValueError("deviceId 必须大于 0")
+
+    device_name = str(params.get("deviceName") or params.get("name") or "").strip()
+    devices = load_devices()
+    if device_name:
+        for item in devices:
+            if item.get("name") == device_name:
+                return int(item["deviceId"])
+        raise ValueError(f"devices.json 中不存在设备: {device_name}")
+
+    if len(devices) == 1:
+        return int(devices[0]["deviceId"])
+    if not devices:
+        raise ValueError("缺少 deviceId，请先运行 device-list.py 生成 .cache/devices.json")
+    names = ", ".join(item["name"] for item in devices)
+    raise ValueError(f"存在多个设备，请指定 deviceName 或 deviceId。可选: {names}")
 
 
 def resolve_publish_key(params: Optional[Dict[str, Any]] = None) -> str:
@@ -88,12 +109,12 @@ def resolve_publish_key(params: Optional[Dict[str, Any]] = None) -> str:
     devices = load_devices()
     if device_name:
         for item in devices:
-            if item.get("name") == device_name:
-                return item["url"]
+            if item.get("name") == device_name and item.get("url"):
+                return str(item["url"])
         raise ValueError(f"devices.json 中不存在设备: {device_name}")
 
-    if len(devices) == 1:
-        return devices[0]["url"]
+    if len(devices) == 1 and devices[0].get("url"):
+        return str(devices[0]["url"])
     if not devices:
         raise ValueError("缺少 publishKey，请先运行 device-list.py 生成 .cache/devices.json")
     names = ", ".join(item["name"] for item in devices)
