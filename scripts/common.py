@@ -45,6 +45,31 @@ def request_skill(path: str, body: Optional[Dict[str, Any]] = None) -> Any:
     return payload
 
 
+def request_skill_multipart(path: str, task_id: int, file_path: str) -> Any:
+    api_key = get_api_key()
+    if task_id <= 0:
+        raise ValueError("taskId 必须大于 0")
+    if not os.path.isfile(file_path):
+        raise ValueError(f"文件不存在: {file_path}")
+
+    url = f"{API_BASE}{path}"
+    with open(file_path, "rb") as file_obj:
+        response = requests.post(
+            url,
+            data={"taskId": str(task_id)},
+            files={"file": (os.path.basename(file_path), file_obj)},
+            headers={API_KEY_HEADER: api_key},
+            timeout=120,
+        )
+    response.raise_for_status()
+    payload = response.json() if response.text else {}
+    code = payload.get("code")
+    if code is not None and code != SUCCESS_CODE:
+        message = payload.get("message") or str(payload)
+        raise ValueError(f"API 错误: code={code}, message={message}")
+    return payload
+
+
 def ensure_cache_dir() -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
 

@@ -1,7 +1,7 @@
 ---
 name: ainote-skill
-description: ainote skill / 小红书相关能力：发布笔记、查询已发布笔记列表、导入模板、获取设备列表。Use when publishing or querying content via ainote skill API.
-version: 2.0.0
+description: ainote skill / 小红书相关能力：发布笔记、上传配图、查询已发布笔记列表、导入模板、获取设备列表。Use when publishing or querying content via ainote skill API.
+version: 2.1.0
 author: custom
 type: automation
 permissions:
@@ -12,7 +12,7 @@ input_schema:
   properties:
     tool:
       type: string
-      description: 要调用的子能力名：`device-list` / `publish` / `note-list` / `add-template`
+      description: 要调用的子能力名：`device-list` / `publish` / `upload-image` / `note-list` / `add-template`
     params:
       type: object
       description: 对应子能力的参数对象（也可以直接按脚本 CLI 方式调用）
@@ -37,14 +37,17 @@ API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
 ## 推荐流程
 
 1. `device-list` → 缓存 `.cache/devices.json`（`[{name, deviceId, url}]`）
-2. 其他脚本通过 `deviceName` 或 `deviceId` 指定设备
+2. `publish` → 创建文字笔记，返回 `taskId`
+3. `upload-image` → 传入 `taskId` 与本地图片路径，上传并插入配图
+4. `note-list` → 可选，验证笔记 `images` 已更新
 
 ## 子能力与脚本
 
 | 子能力 | 脚本 | 说明 |
 |--------|------|------|
 | `device-list` | `scripts/device-list.py` | 获取所有设备并写入 `.cache/devices.json` |
-| `publish` | `scripts/publish.py` | 创建笔记任务 |
+| `publish` | `scripts/publish.py` | 创建笔记任务（仅 title/text/device，不含配图） |
+| `upload-image` | `scripts/upload-image.py` | 上传本地图片并追加到指定 task |
 | `note-list` | `scripts/note-list.py` | 获取已发布笔记列表 |
 | `add-template` | `scripts/add-template.py` | 导入笔记模板 |
 
@@ -56,11 +59,22 @@ API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
 | `deviceId` | number | 条件 | 设备 ID（见 devices.json）；仅一台时可省略 |
 | `deviceName` | string | 条件 | 设备名，可替代 deviceId |
 
+返回 `taskId`（即 `data.id`），供 `upload-image` 使用。配图请走 `upload-image`，不在 publish 中传递。
+
+### `upload-image` 参数
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `taskId` | number | 是 | `publish` 返回的任务 ID |
+| 本地路径 | string | 是 | CLI positional，支持多张图片 |
+
+返回 `{taskId, urls, images}`：`urls` 为本次上传的 URL，`images` 为该 task 当前全部配图。
+
 ### `note-list` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `category` | string | 否 | 默认 `published` |
+| `category` | string | 否 | 默认 `published`；查配图任务可用 `checked` |
 | `deviceName` / `publishKey` | string | 条件 | 同 publish |
 | `pageSize` / `pageNum` | number | 否 | 客户端分页（服务端返回全量后切片） |
 
@@ -80,12 +94,16 @@ API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
 # 1) 拉取设备列表（首次必做）
 python3 scripts/device-list.py
 
-# 2) 发布笔记
+# 2) 发布文字笔记
 python3 scripts/publish.py '{"title":"标题","text":"文案","deviceId":123}'
+# 返回含 taskId，例如 {"noteshareResult":{...},"taskId":98765}
 
-# 3) 已发布列表
-python3 scripts/note-list.py --params '{"category":"published","deviceName":"我的设备","pageSize":10,"pageNum":1}'
+# 3) 上传本地图片并插入该笔记
+python3 scripts/upload-image.py --params '{"taskId":98765}' /path/a.jpg /path/b.png
 
-# 4) 导入模板（小红书链接或文案）
+# 4) 已发布/待发布列表
+python3 scripts/note-list.py --params '{"category":"checked","deviceName":"我的设备","pageSize":10,"pageNum":1}'
+
+# 5) 导入模板（小红书链接或文案）
 python3 scripts/add-template.py --params '{"keyword":"https://www.xiaohongshu.com/explore/..."}'
 ```

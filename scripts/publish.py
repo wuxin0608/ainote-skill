@@ -23,7 +23,11 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
     }
     payload = request_skill("/v1/ainote/skill/add/task", body)
-    return {"noteshareResult": payload}
+    task_id = payload.get("data", {}).get("id") or payload.get("id")
+    result: Dict[str, Any] = {"noteshareResult": payload}
+    if task_id is not None:
+        result["taskId"] = int(task_id)
+    return result
 
 
 def main(argv: Optional[List[str]] = None) -> int:
