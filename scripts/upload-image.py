@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""upload-image：上传本地图片并追加到 publish 创建的笔记任务"""
+"""upload-image：上传本地图片并追加到 add-task 创建的笔记任务"""
 
 from __future__ import annotations
 

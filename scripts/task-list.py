@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""note-list：获取已发布笔记列表"""
+"""task-list：获取笔记任务列表"""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch published note list via ainote skill API.")
+    parser = argparse.ArgumentParser(description="Fetch note task list via ainote skill API.")
     parser.add_argument(
         "--params",
         default=None,

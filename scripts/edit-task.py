@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""publish：创建笔记任务（add/task）"""
+"""edit-task：修改笔记任务标题与正文（edit/task），不修改配图"""
 
 from __future__ import annotations
 
@@ -7,27 +7,33 @@ import json
 import sys
 from typing import Any, Dict, List, Optional
 
-from common import request_skill, resolve_device_id
+from common import request_skill
 
 
 def run(params: Dict[str, Any]) -> Dict[str, Any]:
-    device_id = resolve_device_id(params)
+    raw_task_id = params.get("taskId")
+    if raw_task_id is None:
+        raise ValueError("缺少 taskId")
+    task_id = int(raw_task_id)
+    if task_id <= 0:
+        raise ValueError("taskId 必须大于 0")
+
     title = str(params.get("title") or "").strip()
     text = str(params.get("text") or "").strip()
     if not title or not text:
         raise ValueError("缺少 title 或 text")
 
     body = {
-        "deviceId": device_id,
+        "taskId": task_id,
         "title": title,
         "text": text,
     }
-    payload = request_skill("/v1/ainote/skill/add/task", body)
-    task_id = payload.get("data", {}).get("id") or payload.get("id")
-    result: Dict[str, Any] = {"noteshareResult": payload}
-    if task_id is not None:
-        result["taskId"] = int(task_id)
-    return result
+    payload = request_skill("/v1/ainote/skill/edit/task", body)
+    updated_id = payload.get("data", {}).get("id") or payload.get("id") or task_id
+    return {
+        "editResult": payload,
+        "taskId": int(updated_id),
+    }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -49,7 +55,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not argv:
         print(
-            '用法: python publish.py \'{"title":"...","text":"...","deviceId":123}\'',
+            '用法: python edit-task.py \'{"taskId":98765,"title":"...","text":"..."}\'',
             file=sys.stderr,
         )
         return 1

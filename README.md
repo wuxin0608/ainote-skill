@@ -1,6 +1,6 @@
 # ainote-skill
 
-Cursor Agent Skill：小红书相关能力——发布笔记、上传配图、查询已发布笔记、导入模板、获取设备列表。
+Cursor Agent Skill：小红书相关能力——创建笔记任务、修改任务文案、上传配图、查询任务列表、导入模板、获取设备列表。
 
 ## 安装
 
@@ -37,9 +37,11 @@ export AINOTE_API_KEY=sk-your-key-here
 # 1. 拉取设备列表（写入 .cache/devices.json）
 python3 scripts/device-list.py
 
-# 2. 发布 / 上传配图 / 查列表 / 导模板
-python3 scripts/publish.py '{"title":"标题","text":"正文","deviceName":"设备名"}'
+# 2. 创建任务 / 上传配图 / 修改文案 / 查列表 / 导模板
+python3 scripts/add-task.py '{"title":"标题","text":"正文","deviceName":"设备名"}'
 python3 scripts/upload-image.py --params '{"taskId":98765}' /path/to/image.jpg
+python3 scripts/edit-task.py '{"taskId":98765,"title":"新标题","text":"新正文"}'
+python3 scripts/task-list.py --params '{"category":"checked","deviceName":"设备名","pageSize":10,"pageNum":1}'
 ```
 
 详细参数见 [SKILL.md](./SKILL.md)。
