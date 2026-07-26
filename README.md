@@ -1,6 +1,6 @@
 # ainote-skill
 
-Cursor Agent Skill：小红书相关能力——创建笔记任务、修改任务文案、上传配图、查询任务列表、导入模板、获取设备列表。
+Cursor Agent Skill：内容项目运营（资料 / 选题 / 全案文案）+ 小红书发布（创建设备笔记、上传配图、导入模板）。
 
 ## 安装
 
@@ -16,16 +16,18 @@ npx skills add wuxin0608/ainote-skill -g -y
 git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
 ```
 
-## 配置
-1. 在 ainote Web 端侧边栏 **「AI Agent 接入」** 复制 `sk-...` API Key（需 VIP 会员）
+开发分支 `content` 含全案文案能力；稳定发布后会合并至 `main`。
 
-2. 安装 Python 依赖：
+## 配置
+
+1. 在 ainote Web 端 **「AI Agent 接入」** 复制 `sk-...` API Key（**用户级固定密钥**，需 VIP）
+2. 安装依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 配置 API Key：
+3. 配置环境变量：
 
 ```bash
 export AINOTE_API_KEY=sk-your-key-here
@@ -34,14 +36,19 @@ export AINOTE_API_KEY=sk-your-key-here
 ## 使用流程
 
 ```bash
-# 1. 拉取设备列表（写入 .cache/devices.json）
-python3 scripts/device-list.py
+# 选项目（多项目时必做）
+python3 scripts/project-list.py
+python3 scripts/project-use.py '{"projectId":123}'
 
-# 2. 创建任务 / 上传配图 / 修改文案 / 查列表 / 导模板
+# 全案文案
+python3 scripts/content-task-create.py '{"goal":"推广方向","content_types":["xiaohongshu"]}'
+python3 scripts/content-task-get.py '{"taskId":987}'
+python3 scripts/piece-list.py '{"taskId":987}'
+
+# 小红书发布
+python3 scripts/device-list.py
 python3 scripts/add-task.py '{"title":"标题","text":"正文","deviceName":"设备名"}'
 python3 scripts/upload-image.py --params '{"taskId":98765}' /path/to/image.jpg
-python3 scripts/edit-task.py '{"taskId":98765,"title":"新标题","text":"新正文"}'
-python3 scripts/task-list.py --params '{"category":"checked","deviceName":"设备名","pageSize":10,"pageNum":1}'
 ```
 
 详细参数见 [SKILL.md](./SKILL.md)。

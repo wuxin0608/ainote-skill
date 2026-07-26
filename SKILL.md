@@ -1,7 +1,7 @@
 ---
 name: ainote-skill
-description: ainote skill / 小红书相关能力：创建笔记任务、修改任务文案、上传配图、查询任务列表、导入模板、获取设备列表。Use when publishing or querying content via ainote skill API.
-version: 2.3.0
+description: ainote skill / 内容运营与小红书发布：切换项目、维护资料与选题、创建全案文案任务、取稿改稿；以及创建设备笔记任务、上传配图、导入模板。Use when publishing or generating content via ainote skill API.
+version: 2.4.0
 author: custom
 type: automation
 permissions:
@@ -12,7 +12,7 @@ input_schema:
   properties:
     tool:
       type: string
-      description: 要调用的子能力名：`device-list` / `add-task` / `edit-task` / `upload-image` / `task-list` / `add-template`
+      description: 子能力名，见下方表格（如 `project-list` / `content-task-create` / `add-task`）
     params:
       type: object
       description: 对应子能力的参数对象（也可以直接按脚本 CLI 方式调用）
@@ -28,97 +28,128 @@ output_schema:
 
 ## 配置
 
-设置环境变量 **`AINOTE_API_KEY`**（`sk-` 前缀，在 Web 端「AI Agent 接入」复制）。
+设置环境变量 **`AINOTE_API_KEY`**（`sk-` 前缀）。
 
-API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
-
-每次调用前脚本会校验 API Key 是否存在；请求头使用 `X-AINOTE-API-KEY`。
+- Key 为**用户级固定唯一密钥**：注册时自动生成，在 Web 端「AI Agent 接入」复制。
+- 同一 Key 可管理多个项目；先用 `project-list` / `project-use` 选定当前项目。
+- API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
+- 请求头：`X-AINOTE-API-KEY`（需 VIP）。
 
 ## 推荐流程
 
-1. `device-list` → 缓存 `.cache/devices.json`（`[{name, deviceId, url}]`）
-2. `add-task` → 创建文字笔记，返回 `taskId`
-3. `upload-image` → 传入 `taskId` 与本地图片路径，上传并插入配图
-4. `edit-task` → 可选，按 `taskId` 修改标题与正文，不改动配图
-5. `task-list` → 可选，查询任务列表，验证笔记 `images` 已更新
+### A. 全案文案（Content Ops）
+
+1. `project-list` → `project-use`（写入 `.cache/project.json`）
+2. 可选：`file-upsert` / `topic-create` 维护资料与选题
+3. `content-task-create` → 返回 `taskId`
+4. `content-task-get` 轮询状态；若 `pending_topic_review` 则 `content-task-confirm`
+5. `piece-list` 取成稿；可选 `piece-update` 改稿
+6. 小红书渠道：将成稿交给下方发布流程（`add-task` / `upload-image`）
+
+### B. 小红书发布（原有）
+
+1. `device-list` → 缓存 `.cache/devices.json`
+2. `add-task` → `upload-image` → 可选 `edit-task` / `task-list`
 
 ## 子能力与脚本
 
 | 子能力 | 脚本 | 说明 |
 |--------|------|------|
-| `device-list` | `scripts/device-list.py` | 获取所有设备并写入 `.cache/devices.json` |
-| `add-task` | `scripts/add-task.py` | 创建笔记任务（仅 title/text/device，不含配图） |
-| `edit-task` | `scripts/edit-task.py` | 按 taskId 修改标题与正文，不修改配图 |
-| `upload-image` | `scripts/upload-image.py` | 上传本地图片并追加到指定 task |
-| `task-list` | `scripts/task-list.py` | 获取笔记任务列表 |
+| `project-list` | `scripts/project-list.py` | 列出可管理项目 |
+| `project-use` | `scripts/project-use.py` | 切换当前项目（服务端 + 本地缓存） |
+| `file-list` | `scripts/file-list.py` | 项目资料列表 |
+| `file-upsert` | `scripts/file-upsert.py` | 创建/更新资料（有 `id` 则更新） |
+| `topic-list` | `scripts/topic-list.py` | 选题库列表 |
+| `topic-create` | `scripts/topic-create.py` | 创建选题 |
+| `content-task-create` | `scripts/content-task-create.py` | 创建全案任务 |
+| `content-task-get` | `scripts/content-task-get.py` | 查询任务状态 |
+| `content-task-confirm` | `scripts/content-task-confirm.py` | 确认选题并生成 |
+| `piece-list` | `scripts/piece-list.py` | 成稿列表 |
+| `piece-update` | `scripts/piece-update.py` | 修改成稿 |
+| `device-list` | `scripts/device-list.py` | 设备列表 |
+| `add-task` | `scripts/add-task.py` | 创建笔记任务 |
+| `edit-task` | `scripts/edit-task.py` | 修改标题正文 |
+| `upload-image` | `scripts/upload-image.py` | 上传配图 |
+| `task-list` | `scripts/task-list.py` | 笔记任务列表 |
 | `add-template` | `scripts/add-template.py` | 导入笔记模板 |
 
-### `add-task` 参数
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `title` | string | 是 | 标题 |
-| `text` | string | 是 | 正文 |
-| `deviceId` | number | 条件 | 设备 ID（见 devices.json）；仅一台时可省略 |
-| `deviceName` | string | 条件 | 设备名，可替代 deviceId |
-
-返回 `taskId`（即 `data.id`），供 `upload-image` / `edit-task` 使用。配图请走 `upload-image`，不在 add-task 中传递。
-
-### `edit-task` 参数
+### `project-use` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `taskId` | number | 是 | 要修改的任务 ID |
-| `title` | string | 是 | 新标题 |
-| `text` | string | 是 | 新正文 |
+| `projectId` | number | 是 | 目标项目 ID |
 
-仅更新标题与正文，**不会修改**任务已有配图。
-
-### `upload-image` 参数
+### `file-upsert` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `taskId` | number | 是 | `add-task` 返回的任务 ID |
-| 本地路径 | string | 是 | CLI positional，支持多张图片 |
+| `id` | number | 否 | 有则更新 |
+| `name` | string | 条件 | 显示名 |
+| `file_name` | string | 否 | 新建时文件名，默认 `note.md` |
+| `content` | string | 否 | 正文 |
+| `projectId` | number | 否 | 默认用 `.cache/project.json` |
 
-返回 `{taskId, urls, images}`：`urls` 为本次上传的 URL，`images` 为该 task 当前全部配图。
-
-### `task-list` 参数
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `category` | string | 否 | 默认 `published`；查配图任务可用 `checked` |
-| `deviceName` / `publishKey` | string | 条件 | 同 add-task |
-| `pageSize` / `pageNum` | number | 否 | 客户端分页（服务端返回全量后切片） |
-
-### `add-template` 参数
+### `topic-create` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `keyword` | string | 是 | 小红书笔记链接（可多条，逗号分隔）；或纯文案（多条用 `---` 分隔），与 Web 端「导入模板」一致 |
+| `title` | string | 是 | 选题标题 |
+| `angle` | string | 否 | 切入角度 |
+| `audience` | string | 否 | 受众 |
 
-返回解析后的模板列表：`[{title, desc, imgs}]`，`imgs` 为配图远程 URL 数组。
+### `content-task-create` 参数
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `goal` | string | 是 | 推广方向 |
+| `use_ai_topics` | bool | 否 | 默认 `true` |
+| `content_types` | string[] | 否 | 默认 `["xiaohongshu"]` |
+| `selected_topics` | object[] | 否 | 选题库模式：`[{project_topic_id, title?, use_count}]` |
+| `audience` | string | 否 | 受众补充 |
+
+返回 `taskId`。
+
+### `content-task-confirm` 参数
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `taskId` | number | 是 | 任务 ID |
+| `topics` | object[] | 否 | `[{id, selected, use_count}]`；省略则仅触发生成 |
+
+### `piece-list` / `piece-update`
+
+- `piece-list`：`{"taskId":123}`
+- `piece-update`：`{"id":1,"result":"成稿正文"}`
+
+### 发布侧参数（摘要）
+
+- `add-task`：`title` / `text` / `deviceId|deviceName`
+- `edit-task`：`taskId` / `title` / `text`
+- `upload-image`：`--params '{"taskId":N}'` + 本地图片路径
+- `task-list`：`category` / `deviceName` / 分页
+- `add-template`：`keyword`（小红书链接或文案）
 
 ## 快速调用
 
 ```bash
 # 在 skill 根目录下执行
 
-# 1) 拉取设备列表（首次必做）
+# 0) 选项目
+python3 scripts/project-list.py
+python3 scripts/project-use.py '{"projectId":123}'
+
+# 1) 资料 / 选题（可选）
+python3 scripts/file-upsert.py '{"name":"项目背景","file_name":"背景.md","content":"..."}'
+python3 scripts/topic-create.py '{"title":"选题A","angle":"场景切入"}'
+
+# 2) 创建全案任务并轮询
+python3 scripts/content-task-create.py '{"goal":"推广方向文案","content_types":["xiaohongshu","moments"]}'
+python3 scripts/content-task-get.py '{"taskId":987}'
+# 若需确认选题：
+python3 scripts/content-task-confirm.py '{"taskId":987}'
+python3 scripts/piece-list.py '{"taskId":987}'
+
+# 3) 发布到小红书
 python3 scripts/device-list.py
-
-# 2) 创建文字笔记
 python3 scripts/add-task.py '{"title":"标题","text":"文案","deviceId":123}'
-# 返回含 taskId，例如 {"noteshareResult":{...},"taskId":98765}
-
-# 3) 上传本地图片并插入该笔记
-python3 scripts/upload-image.py --params '{"taskId":98765}' /path/a.jpg /path/b.png
-
-# 4) 修改标题与正文（不改动配图）
-python3 scripts/edit-task.py '{"taskId":98765,"title":"新标题","text":"新文案"}'
-
-# 5) 已发布/待发布列表
-python3 scripts/task-list.py --params '{"category":"checked","deviceName":"我的设备","pageSize":10,"pageNum":1}'
-
-# 6) 导入模板（小红书链接或文案）
-python3 scripts/add-template.py --params '{"keyword":"https://www.xiaohongshu.com/explore/..."}'
 ```

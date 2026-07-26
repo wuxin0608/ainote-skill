@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared helpers for ainote noteshare skill scripts."""
+"""Shared helpers for ainote skill scripts."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_ROOT = os.path.dirname(SCRIPT_DIR)
 CACHE_DIR = os.path.join(SKILL_ROOT, ".cache")
 DEVICES_CACHE = os.path.join(CACHE_DIR, "devices.json")
+PROJECT_CACHE = os.path.join(CACHE_DIR, "project.json")
 
 API_BASE = "https://ainote.com.cn/api/web"
 API_KEY_HEADER = "X-AINOTE-API-KEY"
@@ -27,22 +28,46 @@ def get_api_key() -> str:
     return key
 
 
-def request_skill(path: str, body: Optional[Dict[str, Any]] = None) -> Any:
-    api_key = get_api_key()
-    url = f"{API_BASE}{path}"
-    response = requests.post(
-        url,
-        json=body or {},
-        headers={API_KEY_HEADER: api_key},
-        timeout=30,
-    )
-    response.raise_for_status()
-    payload = response.json() if response.text else {}
+def _check_payload(payload: Dict[str, Any]) -> Any:
     code = payload.get("code")
     if code is not None and code != SUCCESS_CODE:
         message = payload.get("message") or str(payload)
         raise ValueError(f"API 错误: code={code}, message={message}")
     return payload
+
+
+def request_api(
+    method: str,
+    path: str,
+    *,
+    body: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    timeout: int = 60,
+) -> Any:
+    api_key = get_api_key()
+    url = f"{API_BASE}{path}"
+    headers = {API_KEY_HEADER: api_key}
+    method_u = method.upper()
+    if method_u == "GET":
+        response = requests.get(url, params=params or {}, headers=headers, timeout=timeout)
+    elif method_u == "POST":
+        response = requests.post(
+            url,
+            json=body if body is not None else {},
+            params=params,
+            headers=headers,
+            timeout=timeout,
+        )
+    else:
+        raise ValueError(f"不支持的 HTTP 方法: {method}")
+    response.raise_for_status()
+    payload = response.json() if response.text else {}
+    return _check_payload(payload)
+
+
+def request_skill(path: str, body: Optional[Dict[str, Any]] = None) -> Any:
+    """POST to /v1/ainote/skill/* (legacy publish APIs)."""
+    return request_api("POST", path, body=body or {}, timeout=30)
 
 
 def request_skill_multipart(path: str, task_id: int, file_path: str) -> Any:
@@ -63,11 +88,7 @@ def request_skill_multipart(path: str, task_id: int, file_path: str) -> Any:
         )
     response.raise_for_status()
     payload = response.json() if response.text else {}
-    code = payload.get("code")
-    if code is not None and code != SUCCESS_CODE:
-        message = payload.get("message") or str(payload)
-        raise ValueError(f"API 错误: code={code}, message={message}")
-    return payload
+    return _check_payload(payload)
 
 
 def ensure_cache_dir() -> None:
@@ -96,6 +117,64 @@ def save_devices(devices: List[Dict[str, Any]]) -> None:
     ensure_cache_dir()
     with open(DEVICES_CACHE, "w", encoding="utf-8") as f:
         json.dump(devices, f, ensure_ascii=False, indent=2)
+
+
+def load_project() -> Optional[Dict[str, Any]]:
+    if not os.path.isfile(PROJECT_CACHE):
+        return None
+    with open(PROJECT_CACHE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        return None
+    project_id = data.get("projectId") or data.get("project_id")
+    if project_id is None:
+        return None
+    try:
+        pid = int(project_id)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    return {
+        "projectId": pid,
+        "name": str(data.get("name") or "").strip(),
+    }
+
+
+def save_project(project_id: int, name: str = "") -> None:
+    ensure_cache_dir()
+    with open(PROJECT_CACHE, "w", encoding="utf-8") as f:
+        json.dump(
+            {"projectId": int(project_id), "name": str(name or "").strip()},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def resolve_project_id(params: Optional[Dict[str, Any]] = None) -> int:
+    params = params or {}
+    for key in ("projectId", "project_id"):
+        raw = params.get(key)
+        if raw is not None:
+            project_id = int(raw)
+            if project_id > 0:
+                return project_id
+            raise ValueError("projectId 必须大于 0")
+
+    cached = load_project()
+    if cached:
+        return int(cached["projectId"])
+    raise ValueError("缺少 projectId，请先运行 project-list.py / project-use.py")
+
+
+def with_project_id(params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return a shallow copy of params ensuring project_id is set."""
+    out = dict(params or {})
+    pid = resolve_project_id(out)
+    out["project_id"] = pid
+    out["projectId"] = pid
+    return out
 
 
 def resolve_device_id(params: Optional[Dict[str, Any]] = None) -> int:
@@ -160,3 +239,41 @@ def parse_publish_key(publish_key: str) -> Dict[str, str]:
     if not app_key:
         raise ValueError("publishKey URL 缺少 appkey 参数")
     return {"appkey": app_key, "tag": tag}
+
+
+def parse_json_arg(argv: List[str]) -> Dict[str, Any]:
+    """Parse CLI: either raw JSON, or --params '{...}'."""
+    if not argv:
+        return {}
+    if "--params" in argv:
+        idx = argv.index("--params")
+        if idx + 1 >= len(argv):
+            raise ValueError("缺少 --params 的 JSON 参数")
+        raw = argv[idx + 1]
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("参数必须是 JSON 对象")
+        return data
+    data = json.loads(argv[0])
+    if not isinstance(data, dict):
+        raise ValueError("参数必须是 JSON 对象")
+    return data
+
+
+def cli_main(run_fn, usage: str) -> int:
+    import sys
+
+    argv = list(sys.argv[1:])
+    try:
+        params = parse_json_arg(argv) if argv else {}
+        result = run_fn(params)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    except json.JSONDecodeError as exc:
+        print(json.dumps({"error": f"JSON 解析错误: {exc}"}, ensure_ascii=False))
+        return 1
+    except Exception as exc:
+        if not argv and usage:
+            print(usage, file=sys.stderr)
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        return 1
