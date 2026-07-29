@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""content-task-create：创建全案文案任务（简化入参，脚本侧拼网页同款 body）"""
+"""content-task-create：创建全案任务 + 用户已确认选题（skip_ai，不触发后端模型）"""
 
 from __future__ import annotations
 
@@ -34,18 +34,40 @@ def _build_content_type_config(content_types: List[str]) -> List[Dict[str, Any]]
     return cfg
 
 
+def _normalize_topics(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        row: Dict[str, Any] = {
+            "title": title,
+            "angle": str(item.get("angle") or "").strip(),
+            "audience": str(item.get("audience") or "").strip(),
+            "use_count": int(item.get("use_count") or item.get("useCount") or 1),
+        }
+        tid = item.get("project_topic_id") or item.get("projectTopicId")
+        if tid is not None:
+            row["project_topic_id"] = int(tid)
+        out.append(row)
+    return out
+
+
 def run(params: Dict[str, Any]) -> Dict[str, Any]:
     p = with_project_id(params)
     goal = str(p.get("goal") or p.get("topic") or "").strip()
     if not goal:
         raise ValueError("缺少 goal（推广方向）")
 
-    use_ai = p.get("use_ai_topics")
-    if use_ai is None:
-        use_ai = p.get("useAiTopics")
-    if use_ai is None:
-        use_ai = True
-    use_ai = bool(use_ai)
+    selected = _normalize_topics(p.get("selected_topics") or p.get("selectedTopics") or [])
+    if not selected:
+        raise ValueError(
+            "缺少 selected_topics：请先由 Agent 起草选题并经用户确认后再创建任务"
+        )
 
     raw_types = p.get("content_types") or p.get("contentTypes") or DEFAULT_CONTENT_TYPES
     if isinstance(raw_types, str):
@@ -55,30 +77,29 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         content_types = list(DEFAULT_CONTENT_TYPES)
 
-    selected = p.get("selected_topics") or p.get("selectedTopics") or []
-    if not isinstance(selected, list):
-        selected = []
-
     body: Dict[str, Any] = {
         "project_id": p["project_id"],
+        "source": "agent",
+        "skip_ai": True,
         "brief": {
             "goal": goal,
             "topic": goal,
             "audience": str(p.get("audience") or "").strip(),
-            "actionId": "auto",
-            "actionLabel": "AI 自动推荐",
+            "source": "agent",
+            "actionId": "agent",
+            "actionLabel": "Agent 选题落库",
         },
-        "use_ai_topics": use_ai,
+        "use_ai_topics": False,
         "selected_topics": selected,
         "content_type_config": _build_content_type_config(content_types),
     }
 
-    payload = request_api("POST", "/v1/project_task/create", body=body, timeout=120)
+    payload = request_api("POST", "/v1/project_task/create", body=body, timeout=60)
     info = payload.get("info") or payload.get("data", {}).get("info") or payload.get("data") or {}
-    task_id = info.get("id") if isinstance(info, dict) else None
     result: Dict[str, Any] = {"info": info, "result": payload}
-    if task_id is not None:
-        result["taskId"] = int(task_id)
+    if isinstance(info, dict) and info.get("id") is not None:
+        result["taskId"] = int(info["id"])
+        result["topics"] = info.get("topics") or []
     return result
 
 
@@ -86,7 +107,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         print(
-            '用法: python content-task-create.py \'{"goal":"推广方向","use_ai_topics":true,"content_types":["xiaohongshu"]}\'',
+            '用法: python content-task-create.py \'{"goal":"推广方向","selected_topics":[{"title":"选题A","angle":"..."}]}\'',
             file=sys.stderr,
         )
         return 1

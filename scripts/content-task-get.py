@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""content-task-get：查询全案任务详情与状态"""
+"""content-task-get：查询任务与选题（只读，不触发生成）"""
 
 from __future__ import annotations
 
@@ -20,8 +20,7 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
 
     payload = request_api("GET", "/v1/project_task/get", params={"id": task_id})
     info = payload.get("info") or payload.get("data", {}).get("info") or payload.get("data") or {}
-    status = info.get("status") if isinstance(info, dict) else None
-    return {"taskId": task_id, "status": status, "info": info}
+    return {"taskId": task_id, "info": info, "topics": (info or {}).get("topics") or []}
 
 
 def main(argv: Optional[List[str]] = None) -> int:
