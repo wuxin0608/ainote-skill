@@ -1,7 +1,7 @@
 ---
 name: ainote-skill
-description: ainote skill / 内容运营与小红书发布：切换项目、维护资料；Agent 本地起草选题并经用户确认后 create task 落库；再本地写稿 piece-create 保存；以及设备笔记发布。Use when publishing or generating content via ainote skill API. NEVER trigger backend LLM generation.
-version: 2.6.0
+description: ainote skill / 内容运营：按 Web 复制的 taskId= / projectId= 或今日 due 拉取任务并本地写稿回写；维护资料与选题；设备笔记发布。Use when user says 用 ainote-skill 执行任务 taskId=… or 依次执行任务 taskId=… or 拉取并执行今日到期任务. NEVER trigger backend LLM generation.
+version: 3.2.2
 author: custom
 type: automation
 permissions:
@@ -12,10 +12,10 @@ input_schema:
   properties:
     tool:
       type: string
-      description: 子能力名，见下方表格（如 `project-list` / `content-task-create` / `piece-create`）
+      description: 子能力名（如 `content-task-due` / `content-task-claim` / `piece-create`）
     params:
       type: object
-      description: 对应子能力的参数对象（也可以直接按脚本 CLI 方式调用）
+      description: 对应子能力的参数对象
   required: [tool]
 output_schema:
   type: object
@@ -28,176 +28,163 @@ output_schema:
 
 ## 核心原则（必读）
 
-**选题与写稿一律由当前前端 Agent 完成，后端只做存储，不调用任何模型。**
+**Web 只提交任务与调度配置；选题匹配与写稿一律由本地 Agent + 本 Skill 完成。后端只做存储与状态机，不调用任何模型。**
 
-- ✅ Agent 本地起草选题 → **展示给用户确认** → `content-task-create`（带选题，`skip_ai`）落库
-- ✅ 确认后再 Agent 本地写稿 → `piece-create` 挂到对应 `taskId` + `topicId`
-- ✅ 改稿用 `piece-update`；发布用 `add-task` / `upload-image`
-- ❌ **禁止**调用 `content-task-confirm`（会触发后端 LLM 生成）
-- ❌ **禁止**在未获用户确认选题前写稿或建任务
+**`piece-create` 的 `result` = 渠道成品正文**（可直接复制粘贴发布/发送），不是创作过程、SOP、场景剧本、分析复盘或多版本备选。各类型输出格式真源见 [`references/content-formats.md`](references/content-formats.md)。
+
+### Web 提示词识别（固定格式，按此解析）
+
+Web「复制执行提示词」只会给出极短文本，形态固定为 **空格分隔的 `key=value`**：
+
+| 用户粘贴的提示词 | 你必须做的事 |
+|------------------|--------------|
+| `用 ainote-skill 执行任务 taskId=123 projectId=456` | 只跑 **这一个** taskId（流程 A0） |
+| `用 ainote-skill 依次执行任务 taskId=1,2,3 projectId=456` | 按列表 **挨个** A0；**不要**再调 `content-task-due` 覆盖列表 |
+| `用 ainote-skill 拉取并执行今日到期任务 projectId=456` | `content-task-due` → 对返回列表挨个 A0 |
+
+解析规则：
+
+1. 用正则提取 `taskId=` 后的数字；若含逗号（如 `1,2,3`）则拆成多个 id。
+2. 提取可选 `projectId=`；有则先 `project-use`。
+3. **有 `taskId` 时禁止再调 `content-task-due`**——Web 已给出要执行的 id。
+4. 无 `taskId` 且出现「今日到期 / due」时，才走 `content-task-due`。
+
+**工作流细节由本 Skill 内置，不必写在提示词里。**
+
+- ✅ 收到 `taskId` → `content-task-get` → `claim` → 写稿 → `piece-create` → `finish`
+- ✅ 或 `content-task-due` → **挨个** claim / 写稿 / finish
+- ✅ 任务无选题时：`topic-list` 按 brief.goal 本地匹配后再写
+- ❌ **禁止** `content-task-confirm`（会触发后端 LLM）
+- ❌ **禁止**任何后端 generate / 云端写稿接口
 
 ## 配置
 
 设置环境变量 **`AINOTE_API_KEY`**（`sk-` 前缀）。
 
-- Key 为**用户级固定唯一密钥**：注册时自动生成，在 Web 端「AI Agent 接入」复制。
-- 同一 Key 可管理多个项目；先用 `project-list` / `project-use` 选定当前项目。
-- API 地址固定为 `https://ainote.com.cn/api/web`，无需配置。
-- 请求头：`X-AINOTE-API-KEY`（需 VIP）。
+- Key 为用户级固定密钥：Web 端「AI Agent 接入」复制。
+- API 地址：`https://ainote.com.cn/api/web`（可用环境变量 `AINOTE_API_BASE` 覆盖）
+- 请求头：`X-AINOTE-API-KEY`（需 VIP）
 
 ## 推荐流程
 
-### A. Agent 选题确认 → 建任务 → 写稿落库
+### A0. 执行指定 taskId（Web「复制执行提示词」主路径）
 
-1. `project-list` → `project-use`（写入 `.cache/project.json`）
-2. 可选：`file-list` / `file-upsert`、`topic-list` 拉取或维护资料与选题库
-3. **Agent 本地起草选题**（若干条：`title` / `angle` / `audience`），**先发给用户确认/修改**，未确认不得继续
-4. 用户确认后：`content-task-create`（`goal` + `selected_topics`）→ 任务与选题一并入库，返回 `taskId` 与 topics（含 topic `id`）
-5. 可选：`content-task-get` 核对任务与选题
-6. **Agent 按已确认选题本地写稿**（一题一稿或多渠道）
-7. `piece-create`（必带 `taskId` + `topicId`/`project_task_topic_id` + `result`）保存成稿
-8. 可选：`piece-update` / `piece-list`；小红书再走发布流程
+对每个 `taskId`：
 
-### B. 小红书发布（原有）
+1. 若提示词含 `projectId`：`project-use`
+2. `content-task-get`（`taskId`）读 brief / topics / `content_type_config` / 项目
+3. `content-task-claim` → `batch_tag`；若 `claimed=false` 则跳过并说明 reason
+4. 若 topics 为空：`topic-list`，按 brief.goal 本地匹配；`piece-create` 可带 title
+5. 通常**仅一种** `content_type`：按 `piece_count` 本地写稿；有多选题则轮转均分
+6. **写稿前** `Read references/content-formats.md` 中该 `content_type` 小节，严格按格式写 `result`
+7. 每篇 `piece-create`（同一 `batch_tag` + `batch_piece_index` 从 1 起）
+8. `content-task-finish`（带 `batch_tag`）
+9. 提示用户回 Web 工作台**手动刷新**任务列表
 
-1. `device-list` → 缓存 `.cache/devices.json`
-2. `add-task` → `upload-image` → 可选 `edit-task` / `task-list`
+### A. 执行今日到期任务（无 taskId 时）
+
+| `schedule_type` | 含义 | Skill 何时领取 |
+|-----------------|------|----------------|
+| `manual` | 立即执行 | `pending_content` 且空闲时即到期 |
+| `daily` | 每天循环 | `schedule_enabled` 且 `next_trigger_at <= now`；领取后算次日 |
+| `weekly` | 每周循环 | 同上；领取后算下周 |
+| `once` | 定时一次（旧数据） | 同上；领取后关闭调度 |
+
+1. 可选 `project-use`（若有 `projectId`）
+2. `content-task-due`（可选 `projectId`）→ 到期列表
+3. **对每个任务挨个**走 A0
+4. Web 列表手动刷新看 `run_state` 与成稿
+
+### B. Agent 选题确认后建任务（可选）
+
+1. 本地起草选题 → **用户确认**
+2. `content-task-create`（`goal` + 可选 `selected_topics`，可带 `schedule_type`：manual/daily/weekly）
+3. 再走流程 A / A0
+
+### C. 小红书发布
+
+1. `device-list` → `add-task` → `upload-image`
 
 ## 子能力与脚本
 
 | 子能力 | 脚本 | 说明 |
 |--------|------|------|
 | `project-list` | `scripts/project-list.py` | 列出可管理项目 |
-| `project-use` | `scripts/project-use.py` | 切换当前项目（服务端 + 本地缓存） |
-| `file-list` | `scripts/file-list.py` | 项目资料列表 |
-| `file-upsert` | `scripts/file-upsert.py` | 创建/更新资料（有 `id` 则更新） |
-| `topic-list` | `scripts/topic-list.py` | 选题库列表 |
-| `topic-create` | `scripts/topic-create.py` | 写入项目选题库（可选；任务选题以 create task 为准） |
-| `content-task-create` | `scripts/content-task-create.py` | **用户确认后**：任务+选题落库（`skip_ai`，不调模型） |
-| `content-task-get` | `scripts/content-task-get.py` | 查询任务与选题（只读） |
-| `piece-create` | `scripts/piece-create.py` | **保存 Agent 成稿**（挂已有 task/topic） |
-| `piece-list` | `scripts/piece-list.py` | 成稿列表 |
-| `piece-update` | `scripts/piece-update.py` | 修改成稿 |
-| `device-list` | `scripts/device-list.py` | 设备列表 |
-| `add-task` | `scripts/add-task.py` | 创建笔记任务 |
-| `edit-task` | `scripts/edit-task.py` | 修改标题正文 |
-| `upload-image` | `scripts/upload-image.py` | 上传配图 |
-| `task-list` | `scripts/task-list.py` | 笔记任务列表 |
-| `add-template` | `scripts/add-template.py` | 导入笔记模板 |
+| `project-use` | `scripts/project-use.py` | 切换当前项目 |
+| `file-list` / `file-upsert` | 对应脚本 | 项目资料 |
+| `topic-list` / `topic-create` | 对应脚本 | 选题库 |
+| `content-task-list` | `scripts/content-task-list.py` | 项目任务列表 |
+| `content-task-due` | `scripts/content-task-due.py` | **到期待执行任务**（仅无 taskId 时用） |
+| `content-task-claim` | `scripts/content-task-claim.py` | **领取执行权 + batch_tag** |
+| `content-task-finish` | `scripts/content-task-finish.py` | **结束本批并回写状态** |
+| `content-task-create` | `scripts/content-task-create.py` | 确认后任务+选题落库 |
+| `content-task-get` | `scripts/content-task-get.py` | 任务详情（只读） |
+| `piece-create` | `scripts/piece-create.py` | 保存成稿（可带 batch） |
+| `piece-list` / `piece-update` | 对应脚本 | 成稿列表/改稿 |
+| `device-list` / `add-task` / … | 对应脚本 | 发布侧 |
 
-### 已废弃（Agent 禁止使用）
+### 已废弃
 
-| 子能力 | 脚本 | 原因 |
-|--------|------|------|
-| `content-task-confirm` | `scripts/content-task-confirm.py` | 确认选题并触发**后端**生成 |
+| 子能力 | 原因 |
+|--------|------|
+| `content-task-confirm` | 触发后端 LLM |
 
-### `project-use` 参数
+### `content-task-due` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `projectId` | number | 是 | 目标项目 ID |
+| `projectId` | number | 否 | 限定项目；省略则跨项目返回有权限的到期任务 |
 
-### `file-upsert` 参数
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `id` | number | 否 | 有则更新 |
-| `name` | string | 条件 | 显示名 |
-| `file_name` | string | 否 | 新建时文件名，默认 `note.md` |
-| `content` | string | 否 | 正文 |
-| `projectId` | number | 否 | 默认用 `.cache/project.json` |
-
-### `topic-create` 参数
+### `content-task-claim` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `title` | string | 是 | 选题标题 |
-| `angle` | string | 否 | 切入角度 |
-| `audience` | string | 否 | 受众 |
+| `taskId` | number | 是 | 任务 ID |
+| `trigger_source` | string | 否 | 默认 `agent` |
 
-### `content-task-create` 参数
+返回：`claimed`、`batch_tag`、`task`（含 topics / content_type_config）。
+
+### `content-task-finish` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `goal` | string | 是 | 推广方向 |
-| `selected_topics` | object[] | 是 | 用户已确认选题：`[{title, angle?, audience?, use_count?, project_topic_id?}]` |
-| `content_types` | string[] | 否 | 默认 `["xiaohongshu"]` |
-| `audience` | string | 否 | 受众补充 |
-
-脚本固定传 `skip_ai=true` / `source=agent`，**不会**触发后端模型。  
-返回 `taskId` 与 `topics`（含服务端分配的 topic `id`，写稿时要用）。
-
-### `content-task-get` 参数
-
-- `{"taskId":123}` → 任务详情 + topics
+| `taskId` | number | 是 | 任务 ID |
+| `batch_tag` | string | 推荐 | 本批标签 |
+| `failed` | bool | 否 | 强制标记失败 |
+| `error` | string | 否 | 失败摘要 |
 
 ### `piece-create` 参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `result` | string | 是 | 成稿全文（Agent 已写好） |
-| `taskId` / `project_task_id` | number | 是* | 挂到已确认任务（推荐必填） |
-| `topicId` / `project_task_topic_id` | number | 是* | 对应选题 id（来自 create/get） |
-| `title` | string | 否 | 省略则用选题标题或正文首行 |
+| `result` | string | 是 | 成稿全文 |
+| `taskId` | number | 是* | 挂到已领取任务 |
+| `topicId` | number | 是* | 选题 id |
 | `content_type` | string | 否 | 默认 `xiaohongshu` |
-| `angle` / `audience` | string | 否 | 一般可省略（跟选题） |
-| `projectId` | number | 否 | 默认用 `.cache/project.json` |
-
-\* 正常流程必须带 `taskId` + `topicId`。
-
-### `piece-list` / `piece-update`
-
-- `piece-list`：`{"taskId":123}`
-- `piece-update`：`{"id":1,"result":"成稿正文"}`
-
-### 发布侧参数（摘要）
-
-- `add-task`：`title` / `text` / `deviceId|deviceName`
-- `edit-task`：`taskId` / `title` / `text`
-- `upload-image`：`--params '{"taskId":N}'` + 本地图片路径
-- `task-list`：`category` / `deviceName` / 分页
-- `add-template`：`keyword`（小红书链接或文案）
+| `batch_tag` | string | 推荐 | 与 claim 返回一致 |
+| `batch_piece_index` | number | 推荐 | 该类型下从 1 起；幂等键 |
 
 ## 写稿提示（Agent）
 
-1. 先 `file-list` / `topic-list` 获取事实，**不要虚构**价格、资质、案例。
-2. 选题阶段：列出 2～5 条候选，标明标题/角度/受众，**等用户回复确认或修改后再** `content-task-create`。
-3. 写稿阶段：严格按已确认选题写；小红书第一行短标题，短段落，末行 3～6 个 `#话题`。
-4. 每篇写完用 `piece-create` 带上对应 `taskId` + `topicId`。
+1. 先 `file-list` / `content-task-get` 取事实，**不要虚构**价格、资质、案例。
+2. 按启用类型的 `piece_count` 产出（新任务通常只有一种类型）；有选题则轮转均分。
+3. **强制**：写每篇前打开 [`references/content-formats.md`](references/content-formats.md)，按该任务 `content_type` 小节写；格式以该文件为准（含共同规则）。
+4. `result` 必须是可直接复制到目标渠道的成品。例如 `private_chat` 是 3～5 行短消息（**单换行、禁止空行**），禁止 `【场景】` / `话术 A` / `转化要点` / 对方回复示例。
+5. 同一批次所有 `piece-create` 使用相同 `batch_tag`。
+6. 写完后必须 `content-task-finish`，否则 Web 一直显示执行中。
 
 ## 快速调用
 
 ```bash
-# 在 skill 根目录下执行
+export AINOTE_API_KEY=sk-...
 
-# 0) 选项目
-python3 scripts/project-list.py
+# Web 复制「执行任务 taskId=987 projectId=123」时：
 python3 scripts/project-use.py '{"projectId":123}'
+python3 scripts/content-task-get.py '{"taskId":987}'
+python3 scripts/content-task-claim.py '{"taskId":987}'
+# … 本地写稿 + piece-create …
+python3 scripts/content-task-finish.py '{"taskId":987,"batch_tag":"..."}'
 
-# 1) 资料（可选）
-python3 scripts/file-list.py
-python3 scripts/topic-list.py
-
-# 2) Agent 本地起草选题 → 用户确认后落库
-python3 scripts/content-task-create.py '{
-  "goal":"推广方向",
-  "selected_topics":[
-    {"title":"选题A","angle":"场景切入","audience":"宝妈"},
-    {"title":"选题B","angle":"对比测评"}
-  ],
-  "content_types":["xiaohongshu"]
-}'
-# → taskId + topics[].id
-
-# 3) Agent 按选题写稿后保存
-python3 scripts/piece-create.py '{
-  "taskId":987,
-  "topicId":11,
-  "result":"标题\\n\\n正文...\\n\\n#话题1 #话题2",
-  "content_type":"xiaohongshu"
-}'
-
-# 4) 发布到小红书
-python3 scripts/device-list.py
-python3 scripts/add-task.py '{"title":"标题","text":"文案","deviceId":123}'
+# 仅「拉取今日到期」时：
+python3 scripts/content-task-due.py '{"projectId":123}'
 ```

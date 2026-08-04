@@ -1,25 +1,27 @@
 # ainote-skill
 
-Cursor Agent Skill：内容项目运营（资料 / **Agent 选题确认建任务** / **Agent 本地写稿落库**）+ 小红书发布。
+Cursor Agent Skill：内容项目运营（资料 / **Agent 本地写稿落库** / 选题）+ 小红书发布。
 
 ## 写稿原则
 
-1. Agent 本地起草选题 → **用户确认** → `content-task-create`（任务+选题入库，`skip_ai`，后端不调模型）
-2. Agent 再按选题本地写稿 → `piece-create` 保存  
-禁止使用 `content-task-confirm`（会触发服务端 LLM）。
+1. Web 派单；本地 Agent 按 `taskId=` / 今日 due 领取任务并写稿
+2. `content-task-claim` → 本地写稿 → `piece-create` → `content-task-finish`
+3. **禁止**使用 `content-task-confirm`（会触发服务端 LLM）
 
 ## 安装
+
+请安装 **`content` 分支**（含 claim/due/finish 与写稿格式规范）：
 
 ### 方式一：Skills CLI（推荐）
 
 ```bash
-npx skills add wuxin0608/ainote-skill -g -y
+npx skills add https://github.com/wuxin0608/ainote-skill/tree/content -g -y
 ```
 
 ### 方式二：手动克隆
 
 ```bash
-git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
+git clone -b content https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
 ```
 
 ## 配置
@@ -35,6 +37,8 @@ pip install -r requirements.txt
 
 ```bash
 export AINOTE_API_KEY=sk-your-key-here
+# 可选：覆盖 API 地址
+# export AINOTE_API_BASE=https://ainote.com.cn/api/web
 ```
 
 ## 使用流程
@@ -44,17 +48,15 @@ export AINOTE_API_KEY=sk-your-key-here
 python3 scripts/project-list.py
 python3 scripts/project-use.py '{"projectId":123}'
 
-# 拉资料 → Agent 起草选题 → 用户确认 → 建任务
-python3 scripts/file-list.py
-python3 scripts/content-task-create.py '{
-  "goal":"推广方向",
-  "selected_topics":[{"title":"选题A","angle":"场景切入"}]
-}'
+# Web 复制「执行任务 taskId=987 projectId=123」时：
+python3 scripts/content-task-get.py '{"taskId":987}'
+python3 scripts/content-task-claim.py '{"taskId":987}'
+# … 本地写稿（见 references/content-formats.md）…
+python3 scripts/piece-create.py '{"taskId":987,"topicId":11,"result":"成稿全文","batch_tag":"...","batch_piece_index":1}'
+python3 scripts/content-task-finish.py '{"taskId":987,"batch_tag":"..."}'
 
-# Agent 写稿落库
-python3 scripts/piece-create.py '{
-  "taskId":987,"topicId":11,"result":"成稿全文","content_type":"xiaohongshu"
-}'
+# 或拉取今日到期
+python3 scripts/content-task-due.py '{"projectId":123}'
 
 # 小红书发布
 python3 scripts/device-list.py

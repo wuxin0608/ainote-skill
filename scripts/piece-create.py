@@ -18,7 +18,6 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
 
     title = str(p.get("title") or p.get("goal") or "").strip()
     if not title:
-        # 小红书习惯：正文第一行常为标题
         first = result.splitlines()[0].strip() if result else ""
         title = first[:40] if first else "Agent 成稿"
 
@@ -41,6 +40,10 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
         ("projectDeviceId", "project_device_id"),
         ("project_template_id", "project_template_id"),
         ("projectTemplateId", "project_template_id"),
+        ("batch_tag", "batch_tag"),
+        ("batchTag", "batch_tag"),
+        ("batch_piece_index", "batch_piece_index"),
+        ("batchPieceIndex", "batch_piece_index"),
     ):
         if p.get(src) is not None and dst not in body:
             body[dst] = p[src]
@@ -53,6 +56,10 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
             out["pieceId"] = int(info["id"])
         if info.get("project_task_id") is not None:
             out["taskId"] = int(info["project_task_id"])
+        if info.get("batch_tag"):
+            out["batch_tag"] = info["batch_tag"]
+        if info.get("idempotent"):
+            out["idempotent"] = True
     return out
 
 
@@ -60,7 +67,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         print(
-            '用法: python piece-create.py \'{"title":"标题","result":"成稿正文","content_type":"xiaohongshu"}\'',
+            '用法: python piece-create.py \'{"taskId":1,"topicId":2,"result":"成稿","batch_tag":"x","batch_piece_index":1}\'',
             file=sys.stderr,
         )
         return 1

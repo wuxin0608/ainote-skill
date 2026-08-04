@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""content-task-get：查询全案任务详情与状态"""
+"""content-task-claim：原子领取任务执行权，返回 batch_tag"""
 
 from __future__ import annotations
 
@@ -17,17 +17,32 @@ def run(params: Dict[str, Any]) -> Dict[str, Any]:
     task_id = int(task_id)
     if task_id <= 0:
         raise ValueError("taskId 必须大于 0")
-
-    payload = request_api("GET", "/v1/project_task/get", params={"id": task_id})
+    body: Dict[str, Any] = {
+        "id": task_id,
+        "trigger_source": str(params.get("trigger_source") or params.get("source") or "agent"),
+    }
+    payload = request_api("POST", "/v1/project_task/claim", body=body, timeout=60)
     info = payload.get("info") or payload.get("data", {}).get("info") or payload.get("data") or {}
-    status = info.get("status") if isinstance(info, dict) else None
-    return {"taskId": task_id, "status": status, "info": info}
+    claimed = bool(info.get("claimed")) if isinstance(info, dict) else False
+    out: Dict[str, Any] = {"taskId": task_id, "claimed": claimed, "info": info}
+    if isinstance(info, dict):
+        if info.get("batch_tag"):
+            out["batch_tag"] = info["batch_tag"]
+        if info.get("reason"):
+            out["reason"] = info["reason"]
+        task = info.get("task")
+        if isinstance(task, dict):
+            out["task"] = task
+            out["expected_piece_count"] = task.get("expected_piece_count")
+            out["topics"] = task.get("topics")
+            out["content_type_config"] = task.get("content_type_config")
+    return out
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
-        print('用法: python content-task-get.py \'{"taskId":123}\'', file=sys.stderr)
+        print('用法: python content-task-claim.py \'{"taskId":123}\'', file=sys.stderr)
         return 1
     try:
         params = json.loads(argv[0])
