@@ -62,7 +62,7 @@ Web「复制执行提示词」只会给出极短文本，形态固定为 **空�
 设置环境变量 **`AINOTE_API_KEY`**（`sk-` 前缀）。
 
 - Key 为用户级固定密钥：Web 端「AI Agent 接入」复制。
-- API 地址：`https://ainote.com.cn/api/web`（可用环境变量 `AINOTE_API_BASE` 覆盖）
+- API 地址：`https://ai2027.cn/note/web`（可用环境变量 `AINOTE_API_BASE` 覆盖）
 - 请求头：`X-AINOTE-API-KEY`（需 VIP）
 
 ## 推荐流程
