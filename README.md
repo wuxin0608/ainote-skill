@@ -10,18 +10,22 @@ Cursor Agent Skill：内容项目运营（资料 / **Agent 本地写稿落库** 
 
 ## 安装
 
-请安装 **`content` 分支**（含 claim/due/finish 与写稿格式规范）：
+默认分支即为现行写稿流程（含 claim/due/finish 与写稿格式规范）。
 
 ### 方式一：Skills CLI（推荐）
 
 ```bash
-npx skills add https://github.com/wuxin0608/ainote-skill/tree/content -g -y
+npx skills add https://gitee.com/wuxin0608/ainote-skill.git -g -y
+# 或 GitHub：
+# npx skills add https://github.com/wuxin0608/ainote-skill.git -g -y
 ```
 
 ### 方式二：手动克隆
 
 ```bash
-git clone -b content https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
+git clone https://gitee.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
+# 或 GitHub：
+# git clone https://github.com/wuxin0608/ainote-skill.git ~/.cursor/skills/ainote-skill
 ```
 
 ## 配置
