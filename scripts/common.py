@@ -16,7 +16,7 @@ CACHE_DIR = os.path.join(SKILL_ROOT, ".cache")
 DEVICES_CACHE = os.path.join(CACHE_DIR, "devices.json")
 PROJECT_CACHE = os.path.join(CACHE_DIR, "project.json")
 
-DEFAULT_API_BASE = "https://ai2027.cn/note/web"
+DEFAULT_API_BASE = "https://ainote.com.cn/api/web"
 API_BASE = (os.environ.get("AINOTE_API_BASE") or DEFAULT_API_BASE).rstrip("/")
 API_KEY_HEADER = "X-AINOTE-API-KEY"
 SUCCESS_CODE = 20000

@@ -42,7 +42,7 @@ pip install -r requirements.txt
 ```bash
 export AINOTE_API_KEY=sk-your-key-here
 # 可选：覆盖 API 地址
-# export AINOTE_API_BASE=https://ai2027.cn/note/web
+# export AINOTE_API_BASE=https://ainote.com.cn/api/web
 ```
 
 ## 使用流程
